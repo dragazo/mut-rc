@@ -64,6 +64,29 @@ impl<T> MutRc<T> {
 
     // -------------------------------------------------------------
 
+    /// Gets a copy of the currently stored value.
+    pub fn get(&self) -> Result<T, BorrowError> where T: Copy {
+        self.with(|x| *x)
+    }
+    /// Gets a clone of the currently stored value.
+    pub fn get_clone(&self) -> Result<T, BorrowError> where T: Clone {
+        self.with(Clone::clone)
+    }
+    /// Takes the currently stored value and replaces it with the default value.
+    pub fn take(&self) -> Result<T, MutateError> where T: Default {
+        self.with_mut(core::mem::take)
+    }
+    /// Replaces the currently stored value and returns the previous value.
+    pub fn replace(&self, value: T) -> Result<T, MutateError> {
+        self.with_mut(|x| core::mem::replace(x, value))
+    }
+    /// Sets the currently stored value.
+    pub fn set(&self, value: T) -> Result<(), MutateError> {
+        self.with_mut(|x| *x = value)
+    }
+
+    // -------------------------------------------------------------
+
     /// Checks if two instances of [`MutRc<T>`] are aliases to the same value.
     pub fn ptr_eq(this: &MutRc<T>, other: &MutRc<T>) -> bool {
         Rc::ptr_eq(&this.0, &other.0)
@@ -162,4 +185,39 @@ fn test_traits() {
     assert_eq!(b.with(|x| *x).unwrap(), 475);
     let fb = b.finalize().unwrap();
     assert_eq!(*fb, 475);
+}
+#[test]
+fn test_extra() {
+    #[derive(Default, Clone, Copy)]
+    struct Thing(i32);
+
+    let a = MutRc::new(Thing(23));
+    let b = a.clone();
+
+    assert_eq!(a.get().unwrap().0, 23);
+    assert_eq!(a.get_clone().unwrap().0, 23);
+    assert_eq!(b.get().unwrap().0, 23);
+    assert_eq!(b.get_clone().unwrap().0, 23);
+    assert!(MutRc::ptr_eq(&a, &b));
+
+    assert_eq!(b.replace(Thing(44)).unwrap().0, 23);
+    assert_eq!(a.get().unwrap().0, 44);
+    assert_eq!(a.get_clone().unwrap().0, 44);
+    assert_eq!(b.get().unwrap().0, 44);
+    assert_eq!(b.get_clone().unwrap().0, 44);
+    assert!(MutRc::ptr_eq(&a, &b));
+
+    assert_eq!(a.take().unwrap().0, 44);
+    assert_eq!(a.get().unwrap().0, 0);
+    assert_eq!(a.get_clone().unwrap().0, 0);
+    assert_eq!(b.get().unwrap().0, 0);
+    assert_eq!(b.get_clone().unwrap().0, 0);
+    assert!(MutRc::ptr_eq(&a, &b));
+
+    assert_eq!(b.set(Thing(47)).unwrap(), ());
+    assert_eq!(a.get().unwrap().0, 47);
+    assert_eq!(a.get_clone().unwrap().0, 47);
+    assert_eq!(b.get().unwrap().0, 47);
+    assert_eq!(b.get_clone().unwrap().0, 47);
+    assert!(MutRc::ptr_eq(&a, &b));
 }
