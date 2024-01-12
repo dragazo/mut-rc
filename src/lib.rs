@@ -7,7 +7,7 @@
 extern crate alloc;
 
 use core::cell::{RefCell, BorrowError, BorrowMutError};
-use alloc::rc::Rc;
+use alloc::rc::{Rc, Weak};
 
 /// An error resulting from [`MutRc::with_mut`].
 #[derive(Debug)]
@@ -91,6 +91,13 @@ impl<T> MutRc<T> {
     pub fn ptr_eq(this: &MutRc<T>, other: &MutRc<T>) -> bool {
         Rc::ptr_eq(&this.0, &other.0)
     }
+
+    // -------------------------------------------------------------
+
+    /// Downgrades this [`MutRc`] into a [`MutWeak`].
+    pub fn downgrade(this: &Self) -> MutWeak<T> {
+        MutWeak(Rc::downgrade(&this.0))
+    }
 }
 impl<T> Clone for MutRc<T> {
     fn clone(&self) -> Self {
@@ -100,6 +107,27 @@ impl<T> Clone for MutRc<T> {
 impl<T> From<T> for MutRc<T> {
     fn from(value: T) -> Self {
         Self::new(value)
+    }
+}
+
+/// A weak reference counted version of [`MutRc`].
+pub struct MutWeak<T>(Weak<RefCell<Rc<T>>>);
+impl<T> MutWeak<T> {
+    /// Checks if two instances of [`MutWeak`] are (weak) aliases to the same value.
+    pub fn ptr_eq(this: &Self, other: &MutWeak<T>) -> bool {
+        this.0.ptr_eq(&other.0)
+    }
+
+    // -------------------------------------------------------------
+
+    /// Attempts to upgrade the weak reference back to a strong reference.
+    pub fn upgrade(&self) -> Option<MutRc<T>> {
+        self.0.upgrade().map(MutRc)
+    }
+}
+impl<T> Clone for MutWeak<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
     }
 }
 
@@ -220,4 +248,49 @@ fn test_extra() {
     assert_eq!(b.get().unwrap().0, 47);
     assert_eq!(b.get_clone().unwrap().0, 47);
     assert!(MutRc::ptr_eq(&a, &b));
+}
+#[test]
+fn test_weak() {
+    #[derive(Default)]
+    struct NoClone(i32);
+
+    let a = MutRc::new(NoClone(32));
+    let b = a.clone();
+    let c = MutRc::downgrade(&a);
+    let d = MutRc::downgrade(&b);
+    let e = MutRc::new(NoClone(32));
+    let f = MutRc::downgrade(&e);
+
+    assert!(MutWeak::ptr_eq(&c, &d));
+    assert!(!MutWeak::ptr_eq(&c, &f));
+    assert!(!MutWeak::ptr_eq(&d, &f));
+
+    assert!(MutWeak::ptr_eq(&c.clone(), &c.clone()));
+    assert!(MutWeak::ptr_eq(&c.clone(), &d.clone()));
+    assert!(MutWeak::ptr_eq(&d.clone(), &d.clone()));
+    assert!(MutWeak::ptr_eq(&f.clone(), &f.clone()));
+    assert!(!MutWeak::ptr_eq(&c.clone(), &f.clone()));
+    assert!(!MutWeak::ptr_eq(&d.clone(), &f.clone()));
+
+    assert!(MutRc::ptr_eq(&c.upgrade().unwrap(), &a));
+    assert!(MutRc::ptr_eq(&d.upgrade().unwrap(), &a));
+    assert!(MutRc::ptr_eq(&f.upgrade().unwrap(), &e));
+
+    drop(a);
+
+    assert!(MutRc::ptr_eq(&c.upgrade().unwrap(), &b));
+    assert!(MutRc::ptr_eq(&d.upgrade().unwrap(), &b));
+    assert!(MutRc::ptr_eq(&f.upgrade().unwrap(), &e));
+
+    drop(b);
+
+    assert!(c.upgrade().is_none());
+    assert!(d.upgrade().is_none());
+    assert!(MutRc::ptr_eq(&f.upgrade().unwrap(), &e));
+
+    drop(e);
+
+    assert!(c.upgrade().is_none());
+    assert!(d.upgrade().is_none());
+    assert!(f.upgrade().is_none());
 }
