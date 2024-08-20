@@ -113,6 +113,12 @@ impl<T> From<T> for MutRc<T> {
 /// A weak reference counted version of [`MutRc`].
 pub struct MutWeak<T>(Weak<RefCell<Rc<T>>>);
 impl<T> MutWeak<T> {
+    // Creates a new, unaliased instance of [`MutWeak<T>`].
+    pub fn new() -> Self {
+        MutWeak(Weak::new())
+    }
+
+
     /// Checks if two instances of [`MutWeak`] are (weak) aliases to the same value.
     pub fn ptr_eq(this: &Self, other: &MutWeak<T>) -> bool {
         this.0.ptr_eq(&other.0)
@@ -128,6 +134,18 @@ impl<T> MutWeak<T> {
 impl<T> Clone for MutWeak<T> {
     fn clone(&self) -> Self {
         Self(self.0.clone())
+    }
+}
+
+impl<T> Default for MutWeak<T> {
+    fn default() -> MutWeak<T> {
+        MutWeak::new()
+    }
+}
+
+impl<T> core::fmt::Debug for MutWeak<T> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "(MutWeak)")
     }
 }
 
@@ -293,4 +311,27 @@ fn test_weak() {
     assert!(c.upgrade().is_none());
     assert!(d.upgrade().is_none());
     assert!(f.upgrade().is_none());
+}
+
+#[test]
+fn test_weak_traits() {
+    #[derive(Default)]
+    struct NoClone(i32);
+
+    let a: MutWeak<NoClone> = Default::default();
+    let d: MutWeak<NoClone> = MutWeak::new();
+    assert!(a.upgrade().is_none());
+    assert!(d.upgrade().is_none());
+
+    let s = format!("{a:?}");
+    assert!(!s.is_empty());
+    assert_eq!(s, "(MutWeak)");
+
+    let b = MutRc::new(NoClone(32));
+    let b = MutRc::downgrade(&b);
+
+    assert!(!MutWeak::ptr_eq(&a, &b));
+
+    let s = format!("{b:?}");
+    assert_eq!(s, "(MutWeak)");
 }
