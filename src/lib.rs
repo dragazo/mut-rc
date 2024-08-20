@@ -136,13 +136,11 @@ impl<T> Clone for MutWeak<T> {
         Self(self.0.clone())
     }
 }
-
 impl<T> Default for MutWeak<T> {
     fn default() -> MutWeak<T> {
         MutWeak::new()
     }
 }
-
 impl<T> core::fmt::Debug for MutWeak<T> {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(f, "(MutWeak)")
@@ -151,7 +149,6 @@ impl<T> core::fmt::Debug for MutWeak<T> {
 
 #[test]
 fn test_basic() {
-    #[derive(Debug)]
     struct NoClone(i32);
 
     let a = MutRc::new(NoClone(45));
@@ -217,6 +214,7 @@ fn test_basic() {
     assert_eq!(b.with(|_| b.with(|x| x.0).unwrap()).unwrap(), 17);
     assert_eq!(c.with(|_| c.with(|x| x.0).unwrap()).unwrap(), 12);
 }
+
 #[test]
 fn test_traits() {
     let a: MutRc<i32> = Default::default();
@@ -232,6 +230,7 @@ fn test_traits() {
     let fb = b.finalize().unwrap();
     assert_eq!(*fb, 475);
 }
+
 #[test]
 fn test_extra() {
     #[derive(Default, Clone, Copy)]
@@ -267,16 +266,16 @@ fn test_extra() {
     assert_eq!(b.get_clone().unwrap().0, 47);
     assert!(MutRc::ptr_eq(&a, &b));
 }
+
 #[test]
 fn test_weak() {
-    #[derive(Default)]
-    struct NoClone(i32);
+    struct NoClone;
 
-    let a = MutRc::new(NoClone(32));
+    let a = MutRc::new(NoClone);
     let b = a.clone();
     let c = MutRc::downgrade(&a);
     let d = MutRc::downgrade(&b);
-    let e = MutRc::new(NoClone(32));
+    let e = MutRc::new(NoClone);
     let f = MutRc::downgrade(&e);
 
     assert!(MutWeak::ptr_eq(&c, &d));
@@ -315,8 +314,7 @@ fn test_weak() {
 
 #[test]
 fn test_weak_traits() {
-    #[derive(Default)]
-    struct NoClone(i32);
+    struct NoClone;
 
     let a: MutWeak<NoClone> = Default::default();
     let d: MutWeak<NoClone> = MutWeak::new();
@@ -327,7 +325,7 @@ fn test_weak_traits() {
     assert!(!s.is_empty());
     assert_eq!(s, "(MutWeak)");
 
-    let b = MutRc::new(NoClone(32));
+    let b = MutRc::new(NoClone);
     let b = MutRc::downgrade(&b);
 
     assert!(!MutWeak::ptr_eq(&a, &b));
